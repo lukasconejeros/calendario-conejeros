@@ -97,17 +97,46 @@
       display:flex;
       justify-content:space-between;
       align-items:flex-start;
-      gap:8px;
+      gap:12px;
     }
     .right-header h2 {
       font-size:16px;
       font-weight:600;
       color:#111827;
+      margin-bottom:10px;
     }
     .tz-label {
       font-size:12px;
       color:#6b7280;
       text-align:right;
+      white-space:nowrap;
+      padding-top:2px;
+    }
+
+    /* Campo nombre */
+    .field {
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin-top:4px;
+      max-width:360px;
+    }
+    .field label{
+      font-size:12px;
+      color:#6b7280;
+      font-weight:600;
+    }
+    .field input{
+      width:100%;
+      border:1px solid #e5e7f0;
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:14px;
+      outline:none;
+    }
+    .field input:focus{
+      border-color:#c7ccf5;
+      box-shadow:0 0 0 4px rgba(79,70,229,0.12);
     }
 
     .calendar-layout {
@@ -324,6 +353,11 @@
         align-self:stretch;
         justify-content:center;
       }
+      .tz-label{
+        padding-top:0;
+        white-space:normal;
+        text-align:left;
+      }
     }
 
     @media (max-width:540px){
@@ -353,8 +387,8 @@
         </div>
 
         <p class="desc">
-          Usa este enlace para agendar la sesión de diagnóstico.  
-          Selecciona el día y uno de los horarios disponibles.  
+          Usa este enlace para agendar la sesión de diagnóstico.
+          Selecciona el día y uno de los horarios disponibles.
           Una vez reservada la hora, recibirás el enlace a la videollamada.
         </p>
 
@@ -368,7 +402,13 @@
         <div class="right-header">
           <div>
             <h2>Seleccione una fecha y hora</h2>
+
+            <div class="field">
+              <label for="nameInput">Tu nombre</label>
+              <input id="nameInput" type="text" placeholder="Nombre y apellido" autocomplete="name" />
+            </div>
           </div>
+
           <div class="tz-label" id="tzLabel"></div>
         </div>
 
@@ -440,6 +480,10 @@
       const confirmBtn = document.getElementById("confirmBtn");
       const statusEl = document.getElementById("status");
 
+      // NUEVO: input nombre
+      const nameInput = document.getElementById("nameInput");
+      nameInput.value = contactData.nombre || "";
+
       const workingSlots = ["10:00", "11:00", "16:00"]; // 1 hr cada una
 
       const today = new Date();
@@ -484,9 +528,9 @@
         return d.getTime() > maxDate.getTime();
       }
       function isWeekend(d){
-        const day = d.getDay(); // 0 domingo, 6 sábado
-        return day === 0 || day === 6;
-      }
+  const day = d.getDay(); // 0 domingo, 6 sábado
+  return day === 0; // solo domingo
+}
 
       function renderCalendar(){
         const firstOfMonth = new Date(currentYear, currentMonth, 1);
@@ -644,13 +688,17 @@
         confirmBtn.disabled = true;
         confirmBtn.textContent = "Enviando...";
 
+        const nombreFinal = (nameInput.value || "").trim() || contactData.nombre || "";
+
         const payload = {
           fecha: toISODate(selectedDate),
           hora: selectedSlot,
           duracion_min: 60,
           canal: "AI Full System",
           origen: "agenda_html_calendly_like",
-          ...contactData
+          nombre: nombreFinal,
+          whatsapp: contactData.whatsapp,
+          email: contactData.email
         };
 
         try {
@@ -686,6 +734,4 @@
   </script>
 </body>
 </html>
-
-
 
