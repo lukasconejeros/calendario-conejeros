@@ -604,11 +604,14 @@
   const WEBHOOK       = "https://flujos-pruebas-n8n.bvil2a.easypanel.host/webhook_off/c4d5e6f7-a8b9-0123-cdef-234567890123";
   const WEBHOOK_AVAIL = "https://flujos-pruebas-n8n.bvil2a.easypanel.host/webhook_off/e6f7a8b9-c0d1-2345-efab-456789012345";
 
-  /* Available time slots (24h labels displayed as 12h) */
+  /* Horarios disponibles: 6 bloques de 1 hora */
   const SLOTS = [
-    "09:00","09:30","10:00","10:30","11:00","11:30",
-    "12:00","12:30","14:00","14:30","15:00","15:30",
-    "16:00","16:30","17:00","17:30"
+    { start: "09:00", end: "10:00", label: "9:00 - 10:00 AM" },
+    { start: "10:30", end: "11:30", label: "10:30 - 11:30 AM" },
+    { start: "12:00", end: "13:00", label: "12:00 - 1:00 PM" },
+    { start: "15:00", end: "16:00", label: "3:00 - 4:00 PM" },
+    { start: "16:30", end: "17:30", label: "4:30 - 5:30 PM" },
+    { start: "18:00", end: "19:00", label: "6:00 - 7:00 PM" }
   ];
 
   /* ════════════════════════════════════════════
@@ -616,7 +619,7 @@
   ════════════════════════════════════════════ */
   let currentYear, currentMonth;
   let selectedDate = null;   // "YYYY-MM-DD"
-  let selectedSlot = null;   // "HH:MM"
+  let selectedSlot = null;   // "HH:MM" (hora inicio)
   let busySlots    = {};     // { "YYYY-MM-DD": ["HH:MM", ...] }
   let loadingSlots = false;
 
@@ -759,40 +762,29 @@
     let html = "";
 
     SLOTS.forEach(slot => {
-      const isBusy = busy.includes(slot);
-      const isSel  = slot === selectedSlot;
+      const isBusy = busy.includes(slot.start);
+      const isSel  = slot.start === selectedSlot;
       let cls = "slot";
       if (isBusy) cls += " slot-busy";
       else if (isSel) cls += " slot-selected";
 
-      const displayTime = formatTime12h(slot);
       const badge = isBusy
         ? `<span class="slot-badge">Ocupado</span>`
         : (isSel ? `<span class="slot-badge">✓</span>` : "");
 
-      html += `<div class="${cls}" ${!isBusy ? `onclick="selectSlot('${slot}')"` : ""}>
-        <span>${displayTime}</span>${badge}
+      html += `<div class="${cls}" ${!isBusy ? `onclick="selectSlot('${slot.start}')"` : ""}>
+        <span>${slot.label}</span>${badge}
       </div>`;
     });
 
     document.getElementById("slotsList").innerHTML = html || `<p class="slots-placeholder">No hay horarios disponibles</p>`;
   }
 
-  function formatTime12h(time24) {
-    const [hStr, mStr] = time24.split(":");
-    let h = parseInt(hStr, 10);
-    const m   = mStr;
-    const ampm = h >= 12 ? "PM" : "AM";
-    if (h > 12) h -= 12;
-    if (h === 0) h = 12;
-    return `${h}:${m} ${ampm}`;
-  }
-
-  function selectSlot(slot) {
+  function selectSlot(startTime) {
     if (!selectedDate) return;
     const busy = busySlots[selectedDate] || [];
-    if (busy.includes(slot)) return;
-    selectedSlot = slot;
+    if (busy.includes(startTime)) return;
+    selectedSlot = startTime;
     renderSlots(selectedDate);
     updateConfirmBtn();
   }
@@ -850,6 +842,8 @@
       weekday:"long", year:"numeric", month:"long", day:"numeric"
     });
 
+    const slotObj = SLOTS.find(s => s.start === selectedSlot);
+
     const payload = {
       nombre,
       whatsapp,
@@ -857,7 +851,8 @@
       fecha:       selectedDate,
       fecha_label: dateLabel,
       hora:        selectedSlot,
-      hora_label:  formatTime12h(selectedSlot),
+      hora_fin:    slotObj ? slotObj.end : "",
+      hora_label:  slotObj ? slotObj.label : selectedSlot,
       timezone:    Intl.DateTimeFormat().resolvedOptions().timeZone
     };
 
@@ -874,10 +869,11 @@
       busySlots[selectedDate].push(selectedSlot);
 
       // Build success message
+      const horaLabel = slotObj ? slotObj.label : selectedSlot;
       let successHtml = `
         <span class="status-check">✓ ¡Reunión agendada!</span>
         <strong>Fecha:</strong> ${dateLabel}<br/>
-        <strong>Hora:</strong> ${formatTime12h(selectedSlot)}<br/>
+        <strong>Hora:</strong> ${horaLabel}<br/>
       `;
 
       if (data.meet_link || data.meetLink || data.link) {
