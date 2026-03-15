@@ -389,7 +389,13 @@
             body: JSON.stringify(payload)
           });
           if (res.ok) {
-            statusEl.textContent = "✓ Reunión registrada. Recibirás confirmación pronto.";
+            const data = await res.json().catch(() => ({}));
+            const meetLink = data.meet_link;
+            if (meetLink) {
+              statusEl.innerHTML = '✓ ¡Reunión agendada! <a href="' + meetLink + '" target="_blank" style="color:#4f46e5;font-weight:700;text-decoration:underline;">Unirse a Google Meet ↗</a>';
+            } else {
+              statusEl.textContent = "✓ Reunión registrada. Recibirás confirmación pronto.";
+            }
             statusEl.classList.add("ok");
             selectedDate = null; selectedSlot = null;
             updateDateUI(); slotList.innerHTML = "";
