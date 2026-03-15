@@ -73,11 +73,18 @@
     }
     .slot-btn .slot-time { font-weight:600; font-size:14px; min-width:100px; }
     .slot-btn .slot-dur { font-size:11px; color:#9ca3af; }
-    .slot-btn:hover { background:#eef2ff; border-color:#c7ccf5; }
+    .slot-btn:hover:not(:disabled):not(.busy) { background:#eef2ff; border-color:#c7ccf5; }
     .slot-btn.selected { background:linear-gradient(135deg,#4f46e5,#6366f1); color:#fff; border-color:transparent; box-shadow:0 8px 22px rgba(79,70,229,0.45); transform:translateY(-1px); }
     .slot-btn.selected .slot-dur { color:rgba(255,255,255,.7); }
-    .slot-btn:disabled { cursor:default; color:#c4c6d5; background:#f3f4f6; border-color:#e5e7f0; box-shadow:none; }
-    .slot-btn.loading { opacity:.5; cursor:wait; }
+    .slot-btn:disabled:not(.busy) { cursor:default; color:#c4c6d5; background:#f3f4f6; border-color:#e5e7f0; box-shadow:none; }
+    /* Busy slot */
+    .slot-btn.busy { cursor:not-allowed; background:#fef2f2; border-color:#fecaca; opacity:0.7; }
+    .slot-btn.busy .slot-time { color:#9ca3af; }
+    .slot-btn.busy .slot-dur { color:#ef4444; font-weight:600; }
+    /* Loading state */
+    .slots-loading { color:#6b7280; font-size:13px; text-align:center; padding:24px 0; display:flex; align-items:center; justify-content:center; gap:8px; }
+    .slots-loading::before { content:""; display:inline-block; width:14px; height:14px; border:2px solid #e5e7f0; border-top-color:#4f46e5; border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
     /* Confirm */
     .confirm-area { margin-top:12px; padding-top:12px; border-top:1px solid #f0f1f5; display:flex; flex-direction:column; gap:8px; }
     .btn-primary { border:none; border-radius:999px; padding:11px 22px; font-size:14px; font-weight:600; background:linear-gradient(135deg,#111827,#1f2937); color:#fff; cursor:pointer; align-self:flex-start; display:inline-flex; align-items:center; gap:8px; transition:background .12s ease, transform .08s ease, box-shadow .12s ease; }
@@ -175,7 +182,8 @@
 
   <script>
     (function() {
-      const WEBHOOK = "https://flujos-pruebas-n8n.bvil2a.easypanel.host/webhook/c4d5e6f7-a8b9-0123-cdef-234567890123";
+      const WEBHOOK      = "https://flujos-pruebas-n8n.bvil2a.easypanel.host/webhook/c4d5e6f7-a8b9-0123-cdef-234567890123";
+      const WEBHOOK_AVAIL = "https://flujos-pruebas-n8n.bvil2a.easypanel.host/webhook/e6f7a8b9-c0d1-2345-efab-456789012345";
 
       const params = new URLSearchParams(window.location.search);
       const contactData = {
@@ -263,7 +271,7 @@
               selectedDate = dateObj;
               selectedSlot = null;
               updateDateUI();
-              renderSlots();
+              loadSlotsForDate(dateObj);
             });
           }
           if (selISO && iso === selISO) btn.classList.add("selected");
@@ -294,23 +302,49 @@
         }
       }
 
-      function renderSlots() {
+      // Carga disponibilidad desde Google Calendar y renderiza slots
+      async function loadSlotsForDate(date) {
+        slotList.innerHTML = '<div class="slots-loading">Verificando disponibilidad...</div>';
+        let busySlots = [];
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 9000);
+        try {
+          const res = await fetch(WEBHOOK_AVAIL + "?date=" + toISO(date), {
+            signal: controller.signal
+          });
+          if (res.ok) {
+            const data = await res.json();
+            busySlots = Array.isArray(data.busy) ? data.busy : [];
+          }
+        } catch(e) {
+          // Si falla (timeout, red, etc.) muestra todos como disponibles
+        } finally {
+          clearTimeout(timer);
+        }
+        renderSlots(busySlots);
+      }
+
+      function renderSlots(busySlots) {
         slotList.innerHTML = "";
         SLOTS.forEach(slot => {
+          const isBusy = busySlots.includes(slot.start);
           const btn = document.createElement("button");
           btn.type = "button";
-          btn.className = "slot-btn";
-          btn.innerHTML = `<span class="slot-time">${slot.label}</span><span class="slot-dur">1 hora</span>`;
-          btn.disabled = !selectedDate;
-          if (selectedSlot === slot.start) btn.classList.add("selected");
-          btn.addEventListener("click", () => {
-            if (!selectedDate) return;
-            selectedSlot = slot.start;
-            slotList.querySelectorAll(".slot-btn").forEach(b => b.classList.remove("selected"));
-            btn.classList.add("selected");
-            statusEl.textContent = "";
-            statusEl.className = "status";
-          });
+          btn.className = "slot-btn" + (isBusy ? " busy" : "");
+          btn.disabled = !selectedDate || isBusy;
+          btn.innerHTML = isBusy
+            ? `<span class="slot-time">${slot.label}</span><span class="slot-dur">Ocupado</span>`
+            : `<span class="slot-time">${slot.label}</span><span class="slot-dur">1 hora</span>`;
+          if (!isBusy && selectedDate) {
+            if (selectedSlot === slot.start) btn.classList.add("selected");
+            btn.addEventListener("click", () => {
+              selectedSlot = slot.start;
+              slotList.querySelectorAll(".slot-btn").forEach(b => b.classList.remove("selected"));
+              btn.classList.add("selected");
+              statusEl.textContent = "";
+              statusEl.className = "status";
+            });
+          }
           slotList.appendChild(btn);
         });
       }
@@ -318,12 +352,12 @@
       prevBtn.addEventListener("click", () => {
         if (prevBtn.disabled) return;
         currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-        renderCalendar(); updateDateUI(); renderSlots();
+        renderCalendar(); updateDateUI(); slotList.innerHTML = "";
       });
       nextBtn.addEventListener("click", () => {
         if (nextBtn.disabled) return;
         currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-        renderCalendar(); updateDateUI(); renderSlots();
+        renderCalendar(); updateDateUI(); slotList.innerHTML = "";
       });
 
       async function confirm() {
@@ -358,7 +392,7 @@
             statusEl.textContent = "✓ Reunión registrada. Recibirás confirmación pronto.";
             statusEl.classList.add("ok");
             selectedDate = null; selectedSlot = null;
-            updateDateUI(); renderSlots();
+            updateDateUI(); slotList.innerHTML = "";
           } else {
             statusEl.textContent = "Hubo un problema. Inténtalo de nuevo.";
             statusEl.classList.add("err");
@@ -374,7 +408,6 @@
 
       confirmBtn.addEventListener("click", confirm);
       renderCalendar();
-      renderSlots();
     })();
   </script>
 </body>
